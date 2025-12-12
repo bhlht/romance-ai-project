@@ -89,6 +89,7 @@ def train(model_name, data_path, output_dir):
         warmup_ratio=0.03,
         group_by_length=True,
         lr_scheduler_type="constant",
+        report_to="none",  # Disable wandb/mlflow logging to prevent interactive prompts
         # REMOVED max_seq_length and packing from init to avoid TypeError in some versions
     )
     

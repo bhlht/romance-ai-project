@@ -13,8 +13,21 @@ class GeminiService:
             genai.configure(api_key=self.api_key)
             self.model = genai.GenerativeModel('gemini-2.5-flash-preview-09-2025')
             self.image_model = genai.GenerativeModel('models/nano-banana-pro-preview') # Direct Image Generation Model
+            
+        # Load Trends
+        self.trends = self.load_trends()
 
-    async def analyze_text(self, text: str) -> str:
+    def load_trends(self):
+        try:
+            import json
+            with open("backend/trends.json", "r", encoding="utf-8") as f:
+                data = json.load(f)
+                return data.get("trends", [])
+        except Exception as e:
+            print(f"Error loading trends: {e}")
+            return []
+
+    async def analyze_text(self, text: str, model_name: str = 'gemini-2.5-flash-preview-09-2025') -> str:
         if not self.api_key:
             return "Error: Gemini API Key is missing. Please configure the server."
 
@@ -33,7 +46,8 @@ class GeminiService:
         """
         
         try:
-            response = self.model.generate_content(prompt)
+            model = genai.GenerativeModel(model_name)
+            response = model.generate_content(prompt)
             return response.text
         except Exception as e:
             return f"Error interacting with Gemini API: {str(e)}"
@@ -80,7 +94,7 @@ class GeminiService:
         except Exception as e:
             return {"error": f"Analysis failed: {str(e)}", "raw_response": str(e)}
 
-    async def generate_cover_prompt(self, text):
+    async def generate_cover_prompt(self, text, model_name: str = 'gemini-2.5-flash-preview-09-2025'):
         prompt = f"""
         Based on the following romance story, write a detailed, high-quality image generation prompt suitable for AI art tools like Midjourney, DALL-E 3, or Stable Diffusion.
         
@@ -97,37 +111,115 @@ class GeminiService:
         {text[:5000]}
         """
         try:
-            response = self.model.generate_content(prompt)
+            model = genai.GenerativeModel(model_name)
+            response = model.generate_content(prompt)
             return response.text.strip()
         except Exception as e:
             return f"Error generating prompt: {str(e)}"
 
-    async def generate_story_idea(self):
+    async def generate_story_idea(self, genre="Random", spice_level="19금(없음)", model_name="gemini-2.5-flash-preview-09-2025", apply_trends=True):
         """
-        Generates a creative romance story premise.
+        Generates a creative romance story premise based on genre and spice level.
         """
-        prompt = """
+        
+        # Format trends for the prompt
+        trend_context = ""
+        if apply_trends and self.trends:
+            trend_list = [f"- {t['name']}: {t['description']}" for t in self.trends]
+            trend_context = "\n**Popular K-Romance Trends (Reference/Mix these if suitable):**\n" + "\n".join(trend_list)
+
+        prompt = f"""
         Generate a unique, creative, and engaging romance novel premis.
+        
+        **Target Genre**: {genre}
+        **Spice Level (수위)**: {spice_level}
+        
+        {trend_context}
+        
+        **Conflict Resolution Instruction**: 
+        - If selected Moods or Traits seem contradictory (e.g., 'Pure' AND 'Obsessive', 'Kind' AND 'Cold'), interpret them as **"Gap Moe" (unexpected charm)** or **"Character Duality"**.
+        - Example: A 'Cold' but 'Kind' male lead = "Cold to everyone else but warm to her."
+        - Example: 'Pure' + 'Hardcore' = "Starts innocent but spirals into intense obsession."
+        - Do not ignore tags; synthesize them into a complex narrative.
+
         Include the following elements:
-        1. **Characters & Dynamics**: Brief description of the two protagonists and their relationship (e.g., Rivals, Childhood friends).
-        2. **Tone & Mood**: e.g., Dark Academia, Fluffy Rom-Com, Angst-filled.
-        3. **Plot Twist / Hook**: A unique conflict or secret that drives the story.
+        1. **Characters & Dynamics**: Incorporate the selected traits naturally, highlighting any interesting dualities.
+        2. **Tone & Mood**: Reflect the selected situations, blending them if multiple are chosen.
+        3. **Plot Twist / Hook**: A unique conflict.
         
         Format the output clearly so the user can easily read and edit it.
         Keep it concise (around 150 words).
         IMPORTANT: Output MUST be in Korean language. (한국어로 작성해 주세요)
         """
         try:
-            response = self.model.generate_content(prompt)
+            model = genai.GenerativeModel(model_name)
+            response = model.generate_content(prompt)
             return response.text.strip()
         except Exception as e:
             return f"Error generating story idea: {str(e)}"
 
-    async def generate_cover_image(self, prompt):
+    async def generate_marketing_data(self, text, model_name="gemini-2.5-flash-preview-09-2025"):
+        prompt = f"""
+        Analyze the following romance novel content and generate a marketing package in JSON format.
+        
+        Required JSON Structure:
+        {{
+            "titles": ["Catchy Title 1", "Catchy Title 2", "Catchy Title 3", "Catchy Title 4", "Catchy Title 5"],
+            "blurb": "A compelling introduction/blurb to hook readers (paragraph form).",
+            "summary": "A concise plot summary (3-5 sentences).",
+            "keywords": ["Keyword1", "Keyword2", "Keyword3", "Keyword4", "Keyword5"]
+        }}
+
+        Content:
+        {text[:10000]}
+
+        IMPORTANT: Output values MUST be in KOREAN. Return ONLY raw JSON.
         """
-        Generates an image using Nano Banana Pro (Gemini Image Model).
-        Returns base64 encoded image or error.
+        try:
+            model = genai.GenerativeModel(model_name)
+            response = model.generate_content(prompt)
+            # Cleanup JSON
+            cleaned = response.text.replace("```json", "").replace("```", "").strip()
+            import json
+            return json.loads(cleaned)
+        except Exception as e:
+            return {"error": f"Error generating marketing data: {str(e)}"}
+
+    async def check_consistency(self, text, char_sheet, world_setting, model_name="gemini-2.5-flash-preview-09-2025"):
+        prompt = f"""
+        You are a Consistency Editor for a novel.
+        Compare the [Story Content] with the [Story Bible] and identify errors.
+
+        [Story Bible]
+        - Characters: {char_sheet}
+        - World: {world_setting}
+
+        [Story Content]
+        {text}
+
+        Analyze for:
+        1. **Name Errors**: Characters referred to by wrong names or spellings.
+        2. **Character Errors**: Actions contradicting the character sheet (unless explained).
+        3. **Plot/World Errors**: Contradictions with the world setting or previous events (if evident).
+        4. **Typos/Grammar**: Major issues only.
+
+        Output JSON structure:
+        {{
+            "name_errors": ["Error 1", "Error 2"],
+            "plot_errors": ["Error 1", "Error 2"],
+            "suggestions": ["Suggestion 1"]
+        }}
+        
+        IMPORTANT: Output values in Korean. Return ONLY raw JSON.
         """
+        try:
+            model = genai.GenerativeModel(model_name)
+            response = model.generate_content(prompt)
+            cleaned = response.text.replace("```json", "").replace("```", "").strip()
+            import json
+            return json.loads(cleaned)
+        except Exception as e:
+            return {"error": f"Consistency check failed: {str(e)}"}
         try:
             # Note: This API call might differ based on exact library version, 
             # but usually it's generate_content with text prompt for image models.
@@ -156,5 +248,37 @@ class GeminiService:
             return {"error": "No image generated. Safety filters might have blocked it."}
         except Exception as e:
             return {"error": f"Image generation failed: {str(e)}"}
+
+    async def summarize_context(self, text, model_name="gemini-2.5-flash-preview-09-2025"):
+        prompt = f"""
+        Summarize the following story segment into a concise 3-5 sentence paragraph. 
+        Focus on key events, character development, and changes in relationship dynamics.
+        This summary will be used as memory for the AI to write the next chapter.
+
+        Content:
+        {text}
+
+        IMPORTANT: Output in Korean.
+        """
+        try:
+            model = genai.GenerativeModel(model_name)
+            response = model.generate_content(prompt)
+            return response.text
+        except Exception as e:
+            return f"Summary Error: {str(e)}"
+
+    async def generate_story_content(self, prompt, temperature=0.7, model_name="gemini-2.5-flash-preview-09-2025"):
+        try:
+            model = genai.GenerativeModel(
+                model_name,
+                generation_config=genai.types.GenerationConfig(
+                    temperature=temperature,
+                    max_output_tokens=4000 # Allow very long generation
+                )
+            )
+            response = model.generate_content(prompt)
+            return response.text
+        except Exception as e:
+             return f"Error creating story: {str(e)}"
 
 gemini_service = GeminiService()
