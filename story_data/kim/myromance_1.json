@@ -1,0 +1,34 @@
+{
+  "current_story": "",
+  "char_sheet": "",
+  "world_setting": "",
+  "memory_chain": [],
+  "critique": null,
+  "idea_suggestion": "",
+  "custom_persona_input": "지브리 애니메이션처럼, 서정적이고 아름답게...",
+  "setting_temperature": 0.77,
+  "setting_model": "gemini-3-pro-preview",
+  "setting_style": "감성적",
+  "setting_preset": "지브리 st",
+  "setting_target_vols": 1,
+  "last_prompt": "",
+  "ig_genre": "사극(중)로맨스",
+  "ig_spice": "19금(없음)",
+  "ig_trends": true,
+  "ig_moods": [
+    "순수남녀",
+    "위기탈출",
+    "케미커플",
+    "티격태격"
+  ],
+  "ig_male": [
+    "순정남",
+    "애교남",
+    "촌사람"
+  ],
+  "ig_female": [
+    "당당/당찬녀",
+    "사이다녀"
+  ],
+  "ig_arc": "차가움->다정함, 위기극복인줄았았는데, 아님->다시위기->진짜위기->해피엔딩"
+}
