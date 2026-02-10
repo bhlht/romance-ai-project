@@ -1,12 +1,15 @@
 # Data
 data/
+story_data/
 *.xlsx
 *.csv
 *.epub
 *.txt
+users.json
 
 # Secrets
 .env
+hf_token.txt
 
 # Python
 __pycache__/
@@ -16,3 +19,8 @@ venv/
 
 # Streamlit
 .streamlit/
+
+# Agent / AI
+.agent/
+.gemini/
+.system_generated/

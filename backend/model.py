@@ -11,7 +11,8 @@ load_dotenv()
 MOCK_MODE = os.getenv("MOCK_MODE", "False").lower() == "true"
 
 class RomanceModel:
-    def __init__(self, base_model_path="deepseek-ai/deepseek-llm-7b-base", lora_path="deepseek_finetuned_model"):
+    def __init__(self, base_model_path="deepseek-ai/deepseek-llm-7b-base", lora_path="TaeHak/korean-harlequin-romance-LoRA"):
+        self.device = "cuda" if torch.cuda.is_available() else "cpu"
         self.tokenizer = None
         self.model = None
         self.is_loaded = False
@@ -22,18 +23,30 @@ class RomanceModel:
         if self.is_loaded:
             return
 
+        # [GCP Deployment] Force Real Loading
         if MOCK_MODE:
-            print("WARNING: Running in MOCK_MODE. No actual model will be loaded.")
+            print("WARNING: Running in MOCK_MODE.")
             self.is_loaded = True
             return
 
-        print("Loading Tokenizer...")
+        print(f"🚀 Initializing Model on Device: {self.device}")
+        
+        # Always use Hugging Face for Cloud Run to ensure consistency
+        self.lora_path = "TaeHak/korean-harlequin-romance-LoRA"
+        print(f"☁️ Downloading LoRA adapter from Hugging Face: {self.lora_path}")
+
+        # 1. Login to Hugging Face (Required for Private Repo)
+        token = os.getenv("HF_TOKEN")
+        
+        print("📥 Loading Tokenizer...")
         self.tokenizer = AutoTokenizer.from_pretrained(
             self.base_model_path, 
-            trust_remote_code=True
+            trust_remote_code=True,
+            token=token
         )
+        self.tokenizer.pad_token = self.tokenizer.eos_token # Fix padding
         
-        print("Loading Base Model (4-bit)...")
+        print("📥 Loading Base Model (DeepSeek-7B 4-bit)...")
         bnb_config = BitsAndBytesConfig(
             load_in_4bit=True,
             bnb_4bit_use_double_quant=True,
@@ -41,23 +54,33 @@ class RomanceModel:
             bnb_4bit_compute_dtype=torch.bfloat16
         )
 
-        self.model = AutoModelForCausalLM.from_pretrained(
-            self.base_model_path,
-            quantization_config=bnb_config,
-            device_map="auto",
-            trust_remote_code=True
-        )
+        try:
+            self.model = AutoModelForCausalLM.from_pretrained(
+                self.base_model_path,
+                quantization_config=bnb_config,
+                device_map="auto",
+                trust_remote_code=True,
+                token=token
+            )
+        except Exception as e:
+            print(f"❌ Base Model Load Error: {e}")
+            raise e
 
-        print(f"Loading LoRA adapters from {self.lora_path}...")
-        # Check if LoRA path exists, otherwise skip (for safety)
-        if os.path.exists(self.lora_path):
-            self.model = PeftModel.from_pretrained(self.model, self.lora_path)
-        else:
-            print(f"Warning: LoRA path {self.lora_path} not found. Using base model only.")
+        print(f"🔗 Merging LoRA Adapter: {self.lora_path}")
+        try:
+            self.model = PeftModel.from_pretrained(
+                self.model, 
+                self.lora_path,
+                token=token
+            )
+            print("✅ LoRA Adapter Loaded Successfully!")
+        except Exception as e:
+            print(f"❌ LoRA Load Error (Check internet/token): {e}")
+            raise e
 
         self.model.eval()
         self.is_loaded = True
-        print("Model Loaded Successfully.")
+        print("🎉 Model Ready for Romance Generation!")
 
     async def generate_text(self, prompt: str, max_length: int = 512, temperature: float = 0.7):
         if not self.is_loaded:

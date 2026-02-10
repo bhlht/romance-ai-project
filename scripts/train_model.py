@@ -1,3 +1,6 @@
+import shutil
+import zipfile
+import time
 import os
 import torch
 from datasets import load_dataset
@@ -10,9 +13,8 @@ from transformers import (
 )
 from peft import LoraConfig
 import argparse
-
 import trl
-print(f"TRL Version: {trl.__version__}")
+
 
 # Configuration (defaults)
 DEFAULT_MODEL_NAME = "deepseek-ai/deepseek-llm-7b-base"
@@ -20,8 +22,67 @@ DEFAULT_DATA_PATH = "data/combined_romance_data.txt"
 DEFAULT_OUTPUT_DIR = "deepseek_finetuned_model"
 MAX_SEQ_LENGTH = 2048
 
+
+def setup_data(data_path):
+    """
+    If data_path is a zip file, copy it to a temp local dir and unzip it.
+    This drastically speeds up loading on Colab compared to reading from Drive.
+    """
+    if data_path.endswith(".zip"):
+        print(f"Detected ZIP file: {data_path}")
+        
+        # Define local temp paths
+        local_zip_path = "/content/temp_data.zip"
+        local_extract_path = "/content/temp_data_extracted"
+        
+        # Clean up previous runs if needed
+        if os.path.exists(local_zip_path):
+            os.remove(local_zip_path)
+        if os.path.exists(local_extract_path):
+            shutil.rmtree(local_extract_path)
+            
+        print(f"Copying {data_path} to {local_zip_path} (local disk)...")
+        start_time = time.time()
+        shutil.copy(data_path, local_zip_path)
+        print(f"Copy took {time.time() - start_time:.2f} seconds.")
+        
+        print(f"Unzipping to {local_extract_path}...")
+        start_time = time.time()
+        with zipfile.ZipFile(local_zip_path, 'r') as zip_ref:
+            zip_ref.extractall(local_extract_path)
+        print(f"Unzip took {time.time() - start_time:.2f} seconds.")
+        
+        # Find the text file inside (assuming single file or specific structure)
+        # For this logic, we'll try to find the first likely text file or return the dir
+        # If the user's zip contains the txt exactly:
+        extracted_files = [
+            os.path.join(dp, f) 
+            for dp, dn, filenames in os.walk(local_extract_path) 
+            for f in filenames 
+            if f.endswith('.txt') or f.endswith('.json')
+        ]
+        
+        if extracted_files:
+            print(f"Using extracted file: {extracted_files[0]}")
+            return extracted_files[0]
+        else:
+            print(f"Warning: No .txt/.json found in zip. Using directory: {local_extract_path}")
+            return local_extract_path
+
+    return data_path
+
 def train(model_name, data_path, output_dir):
     print(f"Loading model: {model_name}")
+    
+    # 0. Setup Data (Handle Zip for Colab speedup)
+    final_data_path = setup_data(data_path)
+    
+    # 0.1 Setup Persistent Cache
+    # Use a cache dir inside output_dir (which is on Drive) to avoid re-tokenizing every time
+    cache_dir = os.path.join(output_dir, "cache_huggingface")
+    os.makedirs(cache_dir, exist_ok=True)
+    os.environ["HF_DATASETS_CACHE"] = cache_dir
+    print(f"Using persistent cache dir: {cache_dir}")
     
     # 1. Quantization Config
     bnb_config = BitsAndBytesConfig(
@@ -46,8 +107,8 @@ def train(model_name, data_path, output_dir):
     tokenizer.padding_side = "right"
 
     # 4. Load Dataset
-    print(f"Loading data from {data_path}...")
-    dataset = load_dataset("text", data_files={"train": data_path}, split="train")
+    print(f"Loading data from {final_data_path}...")
+    dataset = load_dataset("text", data_files={"train": final_data_path}, split="train")
 
     # Detect if we are on an Ampere GPU (A100) or newer to use bf16 (better performance/stability)
     use_bf16 = False
@@ -78,8 +139,10 @@ def train(model_name, data_path, output_dir):
         per_device_train_batch_size=4,
         gradient_accumulation_steps=1,
         optim="paged_adamw_32bit",
-        save_steps=500,
-        logging_steps=25,
+
+        save_steps=50,  # Save more frequently (every 50 steps) to prevent data loss on disconnect
+        save_total_limit=2, # Keep only the last 2 checkpoints to save Drive space
+        logging_steps=10,
         learning_rate=2e-4,
         weight_decay=0.001,
         fp16=not use_bf16,      # Use fp16 if bf16 is OFF
@@ -90,6 +153,7 @@ def train(model_name, data_path, output_dir):
         group_by_length=True,
         lr_scheduler_type="constant",
         report_to="none",  # Disable wandb/mlflow logging to prevent interactive prompts
+        dataset_num_proc=4, # Reduced from os.cpu_count() to prevent RAM OOM on large datasets (17M+)
         # REMOVED max_seq_length and packing from init to avoid TypeError in some versions
     )
     
@@ -112,10 +176,30 @@ def train(model_name, data_path, output_dir):
     )
 
     print("Starting training...")
-    trainer.train()
+    
+    # Check for existing checkpoints to resume from
+    last_checkpoint = None
+    if os.path.exists(output_dir):
+        checkpoints = [d for d in os.listdir(output_dir) if d.startswith("checkpoint-")]
+        if checkpoints:
+            checkpoints.sort(key=lambda x: int(x.split("-")[1]))
+            last_checkpoint = os.path.join(output_dir, checkpoints[-1])
+            print(f"Resuming from checkpoint: {last_checkpoint}")
+    
+    try:
+        trainer.train(resume_from_checkpoint=last_checkpoint)
+        print("Training finished successfully.")
+    except Exception as e:
+        print(f"Training interrupted or errored: {e}")
+        # Re-raise unless you want to suppress specific errors
+        raise e
+    finally:
+        # 8. Force Save on Exit (Connects to user request for robustness)
+        print(f"Saving model state to {output_dir} (finally block)...")
+        trainer.model.save_pretrained(output_dir)
+        tokenizer.save_pretrained(output_dir)
+        print("Model and tokenizer saved.")
 
-    print(f"Training complete. Saving model to {output_dir}...")
-    trainer.model.save_pretrained(output_dir)
     print("Done!")
 
 if __name__ == "__main__":
