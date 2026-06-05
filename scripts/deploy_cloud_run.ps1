@@ -23,11 +23,23 @@ Write-Host "🚀 Deploying to Cloud Run (GPU L4)..."
 $EnvFile = ".env"
 $HF_TOKEN = ""
 $GEMINI_API_KEY = ""
+$PG_HOST = ""
+$PG_PORT = ""
+$PG_DATABASE = ""
+$PG_USER = ""
+$PG_PASSWORD = ""
+$DB_SSL = ""
 
 if (Test-Path $EnvFile) {
     Get-Content $EnvFile | ForEach-Object {
-        if ($_ -match "HF_TOKEN=(.*)") { $HF_TOKEN = $matches[1] }
-        if ($_ -match "GEMINI_API_KEY=(.*)") { $GEMINI_API_KEY = $matches[1] }
+        if ($_ -match "HF_TOKEN=(.*)") { $HF_TOKEN = $matches[1].Trim() }
+        if ($_ -match "GEMINI_API_KEY=(.*)") { $GEMINI_API_KEY = $matches[1].Trim() }
+        if ($_ -match "PG_HOST=(.*)") { $PG_HOST = $matches[1].Trim() }
+        if ($_ -match "PG_PORT=(.*)") { $PG_PORT = $matches[1].Trim() }
+        if ($_ -match "PG_DATABASE=(.*)") { $PG_DATABASE = $matches[1].Trim() }
+        if ($_ -match "PG_USER=(.*)") { $PG_USER = $matches[1].Trim() }
+        if ($_ -match "PG_PASSWORD=(.*)") { $PG_PASSWORD = $matches[1].Trim() }
+        if ($_ -match "DB_SSL=(.*)") { $DB_SSL = $matches[1].Trim() }
     }
 }
 
@@ -45,9 +57,9 @@ if ([string]::IsNullOrEmpty($HF_TOKEN)) {
     --gpu 1 `
     --gpu-type nvidia-l4 `
     --no-cpu-throttling `
-    --memory 16Gi `
-    --cpu 4 `
+    --memory 32Gi `
+    --cpu 8 `
     --timeout 3600 `
-    --set-env-vars "HF_TOKEN=$HF_TOKEN,GEMINI_API_KEY=$GEMINI_API_KEY,MOCK_MODE=False"
+    --set-env-vars "HF_TOKEN=${HF_TOKEN},GEMINI_API_KEY=${GEMINI_API_KEY},MOCK_MODE=False,PG_HOST=${PG_HOST},PG_PORT=${PG_PORT},PG_DATABASE=${PG_DATABASE},PG_USER=${PG_USER},PG_PASSWORD=${PG_PASSWORD},DB_SSL=${DB_SSL}"
 
 Write-Host "✅ Deployment Complete!"

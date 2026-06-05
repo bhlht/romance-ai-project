@@ -24,11 +24,24 @@ class ExportService:
             # If deeper, remove everything before this match.
             start_index = match.start(1) if match.start(1) >= 0 else match.start()
             return text[start_index:].strip()
+
+    def _clean_style_tags(self, text: str) -> str:
+        """
+        Removes style markup tags (<STYLE> and </STYLE>) from the final exported draft.
+        """
+        if not text:
+            return ""
+        # Strip case-insensitive <STYLE> and </STYLE> tags
+        text = re.sub(r'(?i)</?style>', '', text)
+        # Also replace visual sparkles formatting markers in text if any
+        text = text.replace("✨", "")
+        return text
             
         return text
 
     def get_clean_text(self, text: str) -> str:
-        return self._remove_project_plan(text)
+        clean = self._remove_project_plan(text)
+        return self._clean_style_tags(clean)
 
     def split_text_for_serialization(self, text: str, target_chars: int = 2000) -> list[str]:
         """
@@ -39,6 +52,7 @@ class ExportService:
         """
         # 0. Remove Project Plan
         text = self._remove_project_plan(text)
+        text = self._clean_style_tags(text)
 
         # 1. Clean Headers
         # Remove lines starting with [Chapter, ##, or Chapter
@@ -90,6 +104,7 @@ class ExportService:
         """
         # 0. Clean Content (Remove Plan)
         content = self._remove_project_plan(content)
+        content = self._clean_style_tags(content)
 
         book = epub.EpubBook()
         book.set_identifier(f'{title}-{author}')
@@ -132,7 +147,7 @@ class ExportService:
         buffer.seek(0)
         return buffer
 
-    def create_serial_zip(self, episodes: list[str], title: str, author: str, publisher: str = None, format_type='txt') -> io.BytesIO:
+    def create_serial_zip(self, episodes: list[str], title: str, author: str, publisher: str = None, format_type='txt', cover_image_path: str = None) -> io.BytesIO:
         """
         Creates a ZIP file containing split episodes.
         format_type: 'txt' or 'epub'
@@ -146,7 +161,7 @@ class ExportService:
                     zf.writestr(filename, text)
                 elif format_type == 'epub':
                     # Create mini-epub for this episode
-                    epub_buffer = self.create_epub(f"{title} - Episode {i+1}", author, text, publisher=publisher)
+                    epub_buffer = self.create_epub(f"{title} - Episode {i+1}", author, text, cover_image_path=cover_image_path, publisher=publisher)
                     zf.writestr(filename, epub_buffer.getvalue())
                     
         zip_buffer.seek(0)

@@ -14,7 +14,7 @@ hf_token.txt
 # Python
 __pycache__/
 *.pyc
-venv/
+.venv/
 .pytest_cache/
 
 # Streamlit
@@ -24,3 +24,6 @@ venv/
 .agent/
 .gemini/
 .system_generated/
+.vscode
+frontend/__pycache__/
+backend/__pycache__/

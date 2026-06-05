@@ -3,6 +3,7 @@ FROM pytorch/pytorch:2.1.2-cuda12.1-cudnn8-runtime
 # Install system dependencies
 RUN apt-get update && apt-get install -y \
     git \
+    libsentencepiece-dev \
     && rm -rf /var/lib/apt/lists/*
 
 # Set working directory
@@ -11,8 +12,9 @@ WORKDIR /app
 # Copy requirements first to leverage Docker cache
 COPY backend/requirements_docker.txt /app/requirements.txt
 
-# Install python dependencies to avoid cache bust
+# Install python dependencies
 RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir sentencepiece==0.1.99 protobuf
 
 # Copy backend code
 COPY backend /app/backend

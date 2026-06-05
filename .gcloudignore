@@ -20,7 +20,7 @@ tmp/
 *.log
 *.sqlite
 .env
-Dockerfile
 docker-compose.yml
-README.md
-LICENSE
+.venv/
+.agent/
+.gemini/
