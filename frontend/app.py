@@ -460,6 +460,19 @@ def generate_story(
 def main() -> None:
     st.set_page_config(page_title="Romance AI Creator", page_icon="💖", layout="wide")
     
+    # Hide default Streamlit Deploy button, Main Menu (three dots), Header, and Footer
+    st.markdown(
+        """
+        <style>
+        #MainMenu {visibility: hidden;}
+        footer {visibility: hidden;}
+        .stDeployButton {display:none !important;}
+        header {visibility: hidden;}
+        </style>
+        """,
+        unsafe_allow_html=True
+    )
+    
     # Model Options Constants
     writer_model_options = [
         "gemini-2.5-pro",
@@ -1275,16 +1288,13 @@ def main() -> None:
                                 timeout=60
                             )
                             if res.status_code == 200:
-                                if "memory_chain" not in st.session_state:
-                                    st.session_state.memory_chain = []
-                                
-                                # Remove existing summary for this chapter if it exists, to avoid duplicates
-                                curr_ch = st.session_state.get("current_chapter_idx", 1)
-                                st.session_state.memory_chain = [m for m in st.session_state.memory_chain if m.get("chapter") != curr_ch]
-                                
-                                st.session_state.memory_chain.append(res.json())
-                                # Sort memory chain by chapter number
-                                st.session_state.memory_chain.sort(key=lambda x: int(x.get("chapter", 0)))
+                                sum_data = res.json()
+                                ch_num = sum_data.get("chapter_num", st.session_state.get("current_chapter_idx", 1))
+                                chain = st.session_state.get("memory_chain", [])
+                                chain = [m for m in chain if int(m.get("chapter", 0)) != int(ch_num)]
+                                chain.append(sum_data)
+                                chain.sort(key=lambda x: int(x.get("chapter", 0)))
+                                st.session_state.memory_chain = chain
                                 auto_save()
                                 st.rerun()
                             else:
@@ -3447,35 +3457,22 @@ button[aria-selected="true"] div {
 
                       
                       if res.status_code == 200:
-
-                      
                            new_review = res.json().get("review", {})
-
-                      
                            if not isinstance(new_review, dict):
-
-                      
                                new_review = {}
-
-                      
-                           if "applied_fixes" not in new_review or not isinstance(new_review["applied_fixes"], list):
-
-                      
-                               new_review["applied_fixes"] = []
-
-                      
+                           # applied_fixes 영구 보존: 백엔드 반환값 + 기존 로컬값 병합
+                           server_fixes = new_review.get("applied_fixes", [])
+                           if not isinstance(server_fixes, list):
+                               server_fixes = []
+                           merged_fixes = set()
+                           for x in server_fixes:
+                               try: merged_fixes.add(int(x))
+                               except (ValueError, TypeError): pass
                            for fix_ch in old_fixes:
-
-                      
-                               if fix_ch not in new_review["applied_fixes"]:
-
-                      
-                                   new_review["applied_fixes"].append(fix_ch)
-
-                      
+                               try: merged_fixes.add(int(fix_ch))
+                               except (ValueError, TypeError): pass
+                           new_review["applied_fixes"] = sorted(list(merged_fixes))
                            st.session_state.review_result = new_review
-
-                      
                            auto_save()
                       else:
                            st.error(res.text)

@@ -1016,13 +1016,16 @@ async def analyze_review_comprehensive(request: ReviewRequest):
 - 상업적 텐션 및 호흡 (Pacing and commercial potential)
 
 [중요 지시 사항 - 추천 교정 대상 화차 선정 규칙]
-1. **스토리 메타데이터 피드 전체를 처음부터 끝까지 매우 정밀하게 교차 검증하십시오.**
-2. **단순한 서사 호흡의 차이나 스타일적 기교를 지적하는 것은 제외하고, '명백한 인물 붕괴(행동/심리 모순)', '사건의 인과관계 부정(설정 구멍)', '시공간/규칙의 치명적 충돌' 등 독자가 읽었을 때 극의 흐름이 완전히 저해되는 명백한 결함이 있는 화차들만 `recommended_chapters` 배열에 기입하십시오. 경미한 완성도 보완은 지적하지 마십시오.**
-3. **리스트에 노출할 추천 교정 대상 화차는 한 번에 너무 많으면 출력이 잘리므로 최대 5개 이내(가장 중요하고 앞선 화차 위주)로만 제한하여 선정하십시오.**
-4. **피드백(feedback) 본문에서 직접적으로 지적하고 언급한 수정 대상 화차는 반드시 `recommended_chapters` 배열에 구조화된 형태로 함께 포함되어야 합니다. 본문과 배열의 내용이 반드시 일치해야 합니다.**
-5. **추천 화차별 수정 사유(reason)는 절대 길게 쓰지 말고, 1문장(50자 내외)으로 극도로 짧고 간결하게 핵심만 쓰십시오. 사유를 길게 늘여 쓰면 출력 제한으로 인해 전체 분석이 깨집니다.**
-6. **동일한 상태에서 분석을 다시 누를 때 동일하고 일관된 결과가 나와야 하므로, 정확하고 엄밀하게 전수 조사하십시오.**
-7. **모든 비평 내용(feedback의 각 항목 및 overall_critique)은 화차별로 핵심만 요약하여 매우 간결하게(단락별 1~2문장 이내) 작성하십시오. 군더더기 없이 짧게 작성하는 것이 가장 중요합니다.**
+1. **오직 소설 서사의 기본 틀이 무너지는 '치명적 모순(Hard Conflict/Critical Error)'만 검출하여 추천 대상에 넣으십시오.**
+   - 검출 대상(CRITICAL ERROR): 예) 죽었던 인물이 부활하여 활동함, 서울에 있던 인물이 같은 시간대 설명 없이 부산에서 행동함, 설정 정보가 앞뒤로 정면 충돌함, 인물의 태도가 계기나 내면 묘사 전혀 없이 180도 급변하여 개연성이 붕괴함.
+   - 검출 제외 대상(STYLE & QUALITY): 예) 감정 묘사가 더 풍부했으면 좋겠다, 장면 전환이 조금 급하다, 티키타카 대화가 길다, 빌드업이 부족하다, 서사 템포 조절이 필요하다 등. 이러한 연출/문체상 아쉬움은 절대 추천 교정 대상 화차(`recommended_chapters`)에 넣지 마십시오. 오직 피드백 텍스트(`feedback`)에만 적으십시오.
+2. **동일한 설정 충돌 문제가 여러 화차에 걸쳐 있을 때는, 문제의 발단이 되는 최초의 1~2개 핵심 화차만 추천하십시오.** (한꺼번에 모든 관련 화차를 쏟아내지 마십시오.)
+3. **만약 위에서 정의한 치명적 모순(CRITICAL ERROR)이 감지되지 않는다면, 반드시 `recommended_chapters`를 빈 배열 `[]`로 반환하십시오.** (억지로 트집을 잡아 추천 목록을 채우지 마십시오. 완성도가 높으면 0개여야 합니다.)
+4. **리스트에 노출할 추천 교정 대상 화차는 최대 5개 이내로 제한하며, 앞선 화차 우선으로 선정하십시오.**
+5. **피드백(feedback) 본문에서 직접적으로 지적하고 언급한 수정 대상 화차는 반드시 `recommended_chapters` 배열에 구조화된 형태로 함께 포함되어야 합니다. 본문과 배열의 내용이 반드시 일치해야 합니다.**
+6. **추천 화차별 수정 사유(reason)는 절대 길게 쓰지 말고, 1문장(50자 내외)으로 극도로 짧고 간결하게 핵심만 쓰십시오. 사유를 길게 늘여 쓰면 출력 제한으로 인해 전체 분석이 깨집니다.**
+7. **동일한 상태에서 분석을 다시 누를 때 동일하고 일관된 결과가 나와야 하므로, 정확하고 엄밀하게 전수 조사하십시오.**
+8. **모든 비평 내용(feedback의 각 항목 및 overall_critique)은 화차별로 핵심만 요약하여 매우 간결하게(단락별 1~2문장 이내) 작성하십시오. 군더더기 없이 짧게 작성하는 것이 가장 중요합니다.**
 
 반드시 아래 JSON 형식으로만 응답하십시오. (No meta-commentary, 오직 한국어로 작성)
 {{
@@ -1095,6 +1098,51 @@ async def analyze_review_comprehensive(request: ReviewRequest):
                             "recommended_chapters": []
                         }
                     
+            # ── applied_fixes 보존: 서버측에서 AI가 재추천하지 않도록 필터 후 반환 ──
+            # AI가 applied_fixes 화차를 재추천하는 경우, 반환 전에 서버측에서 제거합니다.
+            try:
+                if request.applied_fixes and isinstance(request.applied_fixes, list):
+                    applied_ints = set()
+                    for x in request.applied_fixes:
+                        try:
+                            applied_ints.add(int(x))
+                        except (ValueError, TypeError):
+                            pass
+                    if applied_ints:
+                        # 프론트엔드와 동일하게 다양한 키 후보들을 점검하여 필터링
+                        rec_keys = ["recommended_chapters", "recommended_chapter", "suggested_chapters", "chapters_to_fix"]
+                        for key in rec_keys:
+                            if key in review_data and isinstance(review_data[key], list):
+                                original_recs = review_data[key]
+                                filtered_recs = []
+                                removed = 0
+                                for item in original_recs:
+                                    ch_num = -1
+                                    try:
+                                        if isinstance(item, dict):
+                                            ch_num = int(item.get("chapter", -1))
+                                        elif isinstance(item, (int, str)):
+                                            ch_num = int(item)
+                                    except (ValueError, TypeError):
+                                        pass
+                                    
+                                    if ch_num != -1 and ch_num in applied_ints:
+                                        removed += 1
+                                    else:
+                                        filtered_recs.append(item)
+                                
+                                if removed > 0:
+                                    print(f"[Review] 서버측 {key} 필터: {removed}개 이미 완료된 화차 재추천 제거")
+                                review_data[key] = filtered_recs
+                        
+                    # applied_fixes를 반환값에 포함시켜 프론트엔드에서 덮어쓰기 방지
+                    review_data["applied_fixes"] = sorted(list(applied_ints))
+                else:
+                    review_data.setdefault("applied_fixes", [])
+            except Exception as af_err:
+                print(f"[Review] applied_fixes 처리 중 오류 (무시): {af_err}")
+                review_data.setdefault("applied_fixes", [])
+
             return {"review": review_data}
         else:
             # Standard single segment mode
@@ -1366,17 +1414,40 @@ async def analyze_batch_fix(request: BatchFixRequest):
             "반드시 한국어로 간결하게 작성하십시오. (각 화차 2~3줄, 종합 3~5줄)"
         )
 
-        # Pass 3: 검증 실패해도 수정 결과는 살려야 함
+        # Pass 3: 검증 실패해도 수정 결과는 살려야 함 (다단계 Fallback 적용)
         try:
             verification_report = await gemini_service._call_gem_with_retry(
                 verify_prompt, "models/gemini-2.5-flash", max_tokens=2048, temperature=0.2
             )
-        except Exception as verify_err:
-            print(f"[Batch Fix] Pass 3 검증 실패 (무시하고 계속): {verify_err}")
-            verification_report = (
-                f"⚠️ 검증 리포트 생성 실패 (SAFETY 또는 네트워크 오류). "
-                f"수정된 {len(fixed_results)}개 화차 결과는 정상 저장되었습니다."
-            )
+        except Exception as verify_err1:
+            print(f"[Batch Fix] Pass 3 검증 1차 실패 (민감문장 필터링 후 재시도): {verify_err1}")
+            try:
+                # 2차 시도: surgical_plan과 fixed_summary에서 민감 문장 제거
+                safe_plan = gemini_service._filter_sensitive_sentences(surgical_plan[:2000])
+                safe_summary = gemini_service._filter_sensitive_sentences(fixed_summary)
+                verify_prompt_safe = (
+                    "당신은 순수 창작 목적의 소설을 검사하고 비평하는 편집장입니다. "
+                    "아래 내용은 모두 허구의 로맨스 소설 텍스트이며 실제 사건 및 인물과 무관합니다. "
+                    "작품의 서사 일관성을 검토하는 리포트를 작성하십시오.\n\n"
+                    f"아래 수술 계획서와 수정 결과를 비교하여 검증 리포트를 작성하십시오.\n\n"
+                    f"[수술 계획서]\n{safe_plan}\n\n"
+                    f"[수정 결과 요약]\n{safe_summary}\n\n"
+                    "[검증 지시사항]\n"
+                    "각 화차별로:\n"
+                    "1. Output State가 달성되었는지 (✅/⚠️/❌)\n"
+                    "2. Must Keep이 유지되었는지\n"
+                    "3. 전체 아크 목표 달성 여부 (종합 평가)\n\n"
+                    "반드시 한국어로 간결하게 작성하십시오."
+                )
+                verification_report = await gemini_service._call_gem_with_retry(
+                    verify_prompt_safe, "models/gemini-2.5-flash", max_tokens=2048, temperature=0.2, retries=1
+                )
+            except Exception as verify_err2:
+                print(f"[Batch Fix] Pass 3 검증 2차 실패 (기본 메시지 대체): {verify_err2}")
+                verification_report = (
+                    f"⚠️ 검증 리포트 생성 실패 (SAFETY 또는 네트워크 오류). "
+                    f"수정된 {len(fixed_results)}개 화차 결과는 정상 저장되었습니다."
+                )
 
         return {
             "surgical_plan": surgical_plan,
