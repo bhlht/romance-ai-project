@@ -1,0 +1,13 @@
+{
+  "timestamp": "2026-06-09T15:38:17.873481",
+  "date": "2026-06-09",
+  "time": "15:38:17",
+  "error_type": "Test_Error_Logging",
+  "message": "This is a dummy test error message.",
+  "traceback": "Traceback (mock):\n  File 'test.py', line 10, in main\n    1/0\nZeroDivisionError: division by zero",
+  "context": {
+    "username": "tester",
+    "current_project": "test-project",
+    "current_chapter_idx": 1
+  }
+}
